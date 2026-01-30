@@ -49,17 +49,7 @@ La propuesta arquitectónica de LNXDrive se basa en análisis de múltiples fuen
   - Framework iced para UI en Rust
   - Integración nativa con Rust
 
-- [Avalonia UI](https://avaloniaui.net/)
-  - Framework cross-platform .NET
-  - Alternativa para UI si se usa C#
-  - Soporte para Linux
-
 ### Filesystem y FUSE
-
-- [Tmds.Fuse](https://github.com/tmds/Tmds.Fuse)
-  - Binding FUSE para .NET
-  - Usado como referencia de comparación
-  - Limitaciones documentadas
 
 - [FUSE Protocol - Kernel Documentation](https://www.kernel.org/doc/html/latest/filesystems/fuse.html)
   - Documentación oficial del kernel
@@ -128,11 +118,6 @@ La propuesta arquitectónica de LNXDrive se basa en análisis de múltiples fuen
   - Uso de memoria
   - Tiempo de ejecución
 
-- [.NET Performance Blog](https://devblogs.microsoft.com/dotnet/category/performance/)
-  - Mejoras de rendimiento en .NET
-  - Native AOT
-  - GC optimizations
-
 - [Rust Performance Book](https://nnethercote.github.io/perf-book/)
   - Guía de optimización en Rust
   - Profiling
@@ -142,17 +127,7 @@ La propuesta arquitectónica de LNXDrive se basa en análisis de múltiples fuen
 
 ## Documentación Técnica de Referencia
 
-### Garbage Collection y Memoria
-
-- [.NET Garbage Collection](https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/)
-  - Funcionamiento del GC de .NET
-  - Generaciones
-  - Configuración de Server/Workstation GC
-
-- [.NET Native AOT](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/)
-  - Compilación ahead-of-time
-  - Limitaciones
-  - Comparación con JIT
+### Memoria y Ownership
 
 - [Rust Ownership](https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html)
   - Sistema de ownership
@@ -227,6 +202,41 @@ La propuesta arquitectónica de LNXDrive se basa en análisis de múltiples fuen
   - Métricas y monitoreo
   - Alertas
   - Grafana dashboards
+
+---
+
+## Referencias Históricas (.NET)
+
+> **Nota:** Estas referencias corresponden a tecnologías .NET que fueron evaluadas durante
+> la fase de diseño pero descartadas en favor de Rust. Se mantienen como contexto para
+> entender las decisiones arquitectónicas. Ver [Justificación de Rust](../05-Implementacion/02-justificacion-rust.md).
+
+### Frameworks UI
+
+- [Avalonia UI](https://avaloniaui.net/)
+  - Framework cross-platform .NET
+  - Evaluado como alternativa para UI unificada
+  - Descartado: integración desktop menos nativa
+
+### FUSE en .NET
+
+- [Tmds.Fuse](https://github.com/tmds/Tmds.Fuse)
+  - Binding FUSE para .NET
+  - Descartado: pausas de GC incompatibles con requisitos de latencia
+
+### Rendimiento .NET
+
+- [.NET Performance Blog](https://devblogs.microsoft.com/dotnet/category/performance/)
+  - Mejoras de rendimiento en .NET 8/9
+  - Native AOT, GC optimizations
+
+- [.NET Garbage Collection](https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/)
+  - Funcionamiento del GC (razón principal del descarte)
+  - Generaciones y pausas
+
+- [.NET Native AOT](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/)
+  - Compilación ahead-of-time
+  - Evaluado pero insuficiente para eliminar pausas de GC
 
 ---
 
