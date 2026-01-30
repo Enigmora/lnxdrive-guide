@@ -22,11 +22,11 @@ La arquitectura hexagonal no solo beneficia a LNXDrive internamente, sino que pe
 │                                                                     │
 │  lnxdrive-fuse                                                        │
 │  ────────────────────────────────────────────────────────────────── │
-│  Wrapper FUSE moderno para Rust/.NET con soporte para:              │
-│  • Async/await nativo                                               │
+│  Wrapper FUSE moderno para Rust con soporte para:                   │
+│  • Async/await nativo (tokio)                                       │
 │  • Extended attributes                                              │
 │  • Placeholders (archivos sparse con metadata)                      │
-│  • Memory<T>/Span<T> para zero-copy                                 │
+│  • Zero-copy con slices y referencias                               │
 │  Uso: Cualquier filesystem virtual (no solo sync de nube)           │
 │                                                                     │
 │  lnxdrive-audit                                                       │

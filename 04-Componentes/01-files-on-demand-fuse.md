@@ -96,33 +96,62 @@ Implementaremos Files-on-Demand usando una combinacion de tecnologias:
 
 ### 3.4 Implementacion FUSE Moderna
 
-Para la implementacion FUSE, proponemos crear un **wrapper moderno para .NET 10+** que supere las limitaciones de proyectos existentes:
+Para la implementacion FUSE usamos el crate [fuser](https://crates.io/crates/fuser), el binding FUSE mas maduro y activo en el ecosistema Rust.
 
-**Estado Actual de FUSE en .NET:**
-- [Tmds.Fuse](https://github.com/tmds/Tmds.Fuse) — Prometedor pero limitado
-- [Mono.Fuse.NETStandard](https://www.nuget.org/packages/Mono.Fuse.NETStandard) — Port del viejo Mono.Fuse
-- fusedotnet — Anticuado, solo wrapper basico
+**Estado Actual de FUSE en Rust:**
+- [fuser](https://github.com/cberner/fuser) — Fork activo de rust-fuse, bien mantenido
+- Soporte completo para libfuse3
+- API sincrona con integracion tokio disponible
 
-**Propuesta: `LNXDrive.Fuse` — Wrapper FUSE Moderno para .NET**
+**Implementacion: `lnxdrive-fuse`**
 
-```csharp
-// API propuesta para LNXDrive.Fuse
-public interface IFuseFileSystem
-{
-    ValueTask<Stat> GetAttributesAsync(ReadOnlySpan<char> path, CancellationToken ct);
-    ValueTask<int> ReadAsync(ReadOnlySpan<char> path, Memory<byte> buffer,
-                              long offset, CancellationToken ct);
-    ValueTask<IEnumerable<DirectoryEntry>> ReadDirectoryAsync(ReadOnlySpan<char> path,
-                                                               CancellationToken ct);
-    ValueTask<int> OpenAsync(ReadOnlySpan<char> path, OpenFlags flags, CancellationToken ct);
-    // ... mas operaciones
+```rust
+use fuser::{Filesystem, Request, ReplyAttr, ReplyData, ReplyDirectory};
+use std::ffi::OsStr;
+use std::time::Duration;
+
+/// Filesystem virtual para Files-on-Demand
+pub struct LnxDriveFs {
+    state_repo: Arc<dyn IStateRepository>,
+    hydration_manager: Arc<HydrationManager>,
 }
 
-// Caracteristicas modernas:
-// • Async/await nativo (no callbacks bloqueantes)
-// • Memory<T> y Span<T> para zero-copy
-// • Source generators para bindings libfuse3
-// • Compatible con .NET 10+ y Native AOT
+impl Filesystem for LnxDriveFs {
+    fn getattr(&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
+        // Retorna metadata sin descargar contenido
+        match self.state_repo.get_item_by_inode(ino) {
+            Some(item) => reply.attr(&Duration::from_secs(1), &item.to_file_attr()),
+            None => reply.error(libc::ENOENT),
+        }
+    }
+
+    fn read(&mut self, _req: &Request, ino: u64, _fh: u64,
+            offset: i64, size: u32, _flags: i32, _lock: Option<u64>, reply: ReplyData) {
+        // Hidrata on-demand si es necesario
+        let data = self.hydration_manager.read_with_hydration(ino, offset, size);
+        match data {
+            Ok(bytes) => reply.data(&bytes),
+            Err(e) => reply.error(e.to_errno()),
+        }
+    }
+
+    fn readdir(&mut self, _req: &Request, ino: u64, _fh: u64,
+               offset: i64, mut reply: ReplyDirectory) {
+        // Lista desde cache de metadata (sin descargas)
+        for (i, entry) in self.state_repo.list_children(ino).skip(offset as usize).enumerate() {
+            if reply.add(entry.ino, (offset + i as i64 + 1), entry.kind, &entry.name) {
+                break;
+            }
+        }
+        reply.ok();
+    }
+}
+
+// Caracteristicas:
+// • Sin GC: latencia predecible <1ms para getattr
+// • Zero-copy con slices para operaciones de lectura
+// • Integracion con tokio para I/O asincrono
+// • Extended attributes via xattr para estado de sync
 ```
 
 ---
