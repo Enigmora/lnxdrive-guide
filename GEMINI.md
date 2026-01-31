@@ -100,7 +100,7 @@ git push -u origin fix/descriptive-name
 gh pr create --title "fix: description" --body "..."
 ```
 
-> **Full details:** `.devtrail/03-implementation/GIT-BRANCHING-STRATEGY.md`
+> **Full details:** `.devtrail/00-governance/GIT-BRANCHING-STRATEGY.md`
 
 ---
 

@@ -16,7 +16,7 @@ All changes must go through feature/fix branches and Pull Requests. This ensures
 ## Branch Naming Convention
 
 | Prefix | Purpose | Example |
-|--------|---------|---------|
+| -------- | --------- | --------- |
 | `feature/` | New features or enhancements | `feature/export-excel` |
 | `feat/` | Alias for feature | `feat/folio-c5` |
 | `fix/` | Bug fixes | `fix/report-form-tests` |
@@ -30,11 +30,13 @@ All changes must go through feature/fix branches and Pull Requests. This ensures
 ## Workflow
 
 1. **Before starting work**, verify current branch:
+
    ```bash
    git branch --show-current
    ```
 
 2. **Create branch** from updated `main`:
+
    ```bash
    git checkout main
    git pull origin main
@@ -44,6 +46,7 @@ All changes must go through feature/fix branches and Pull Requests. This ensures
 3. **Make commits** following conventional commit format
 
 4. **Push and create PR**:
+
    ```bash
    git push -u origin fix/descriptive-name
    gh pr create --title "fix: description" --body "..."
@@ -58,7 +61,7 @@ All changes must go through feature/fix branches and Pull Requests. This ensures
 Use semantic prefixes in commit messages:
 
 | Prefix | Use Case |
-|--------|----------|
+| -------- | ---------- |
 | `feat:` | New feature |
 | `fix:` | Bug fix |
 | `docs:` | Documentation only |
