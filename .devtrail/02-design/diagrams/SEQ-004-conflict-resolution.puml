@@ -1,0 +1,137 @@
+@startuml SEQ-004-conflict-resolution
+!theme plain
+title Conflict Resolution Race Condition
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+participant "User" as User
+participant "Conflict\nDialog (UI)" as UI
+participant "DBus\nService" as DBus
+participant "Conflict\nResolver" as Resolver
+participant "Sync\nEngine" as Sync
+participant "State\nRepository" as State
+participant "MS Graph" as API
+
+== Conflict Detection ==
+
+Sync -> API: get_delta()
+API --> Sync: {changes: [{id: "doc1", hash: "abc123", version: 2}]}
+
+Sync -> State: get_local_item("doc1")
+State --> Sync: {hash: "xyz789", version: 1, state: Modified}
+
+note over Sync: Local modified + Remote changed\n= CONFLICT
+
+Sync -> State: create_conflict("doc1", local_v1, remote_v2)
+Sync -> DBus: emit ConflictDetected(conflict_id, details)
+
+DBus -> UI: ConflictDetected signal
+UI -> User: Show conflict dialog
+
+== Race Condition: New Version During Resolution ==
+
+User -> UI: View conflict details
+UI -> DBus: GetConflictDetails(conflict_id)
+DBus -> Resolver: get_details()
+Resolver --> UI: {local: v1, remote: v2, preview: ...}
+
+note over User: User reviews options...\n(takes 30 seconds)
+
+note over API #ffaaaa: **Meanwhile, collaborator\nuploads new version**
+
+Sync -> API: get_delta()
+API --> Sync: {changes: [{id: "doc1", hash: "def456", version: 3}]}
+
+note over Sync #ff6666: **CURRENT: No coordination**\nConflict record not updated
+
+User -> UI: Select "Keep Remote (v2)"
+UI -> DBus: ResolveConflict(conflict_id, KEEP_REMOTE)
+DBus -> Resolver: resolve(conflict_id, KEEP_REMOTE)
+
+alt Current Behavior (VULNERABLE)
+    Resolver -> API: download_file("doc1")
+    note right of Resolver #ff6666: Downloads v2, but v3 exists!
+
+    API --> Resolver: file content (v2)
+    Resolver -> Resolver: apply_remote_version()
+    Resolver -> State: update_state(Synced)
+
+    note over Resolver,API #ff6666: **v3 IS LOST!**\nUser unknowingly discarded\ncollaborator's latest changes
+end
+
+== Proposed: Version Check Before Resolution ==
+
+User -> UI: Select "Keep Remote (v2)"
+UI -> DBus: ResolveConflict(conflict_id, KEEP_REMOTE)
+DBus -> Resolver: resolve(conflict_id, KEEP_REMOTE)
+activate Resolver
+
+Resolver -> State: get_conflict(conflict_id)
+State --> Resolver: {remote_version: 2, remote_hash: "abc123"}
+
+Resolver -> API: get_item_metadata("doc1")
+API --> Resolver: {version: 3, hash: "def456"}
+
+Resolver -> Resolver: compare_versions()
+
+alt Version Changed
+    note over Resolver #90EE90: Detect version mismatch!
+
+    Resolver -> State: update_conflict(conflict_id, remote_v3)
+
+    Resolver --> DBus: Error::ConflictVersionChanged
+    DBus -> UI: Show "Conflict updated" notification
+
+    UI -> User: "New version detected.\nPlease review again."
+
+    UI -> DBus: GetConflictDetails(conflict_id)
+    DBus -> Resolver: get_details()
+    Resolver --> UI: {local: v1, remote: v3, preview: ...}
+
+    note over User #90EE90: User sees latest version\nCan make informed decision
+else Version Same
+    Resolver -> API: download_file("doc1", version: 2)
+    API --> Resolver: file content (v2)
+
+    Resolver -> Resolver: apply_remote_version()
+    Resolver -> State: clear_conflict(conflict_id)
+    Resolver -> State: update_item_state(Synced)
+
+    Resolver --> DBus: success
+    DBus -> UI: ConflictResolved signal
+    UI -> User: "Conflict resolved"
+end
+
+deactivate Resolver
+
+== Keep Both with Unique Naming ==
+
+User -> UI: Select "Keep Both"
+UI -> DBus: ResolveConflict(conflict_id, KEEP_BOTH)
+DBus -> Resolver: resolve(conflict_id, KEEP_BOTH)
+activate Resolver
+
+Resolver -> Resolver: generate_unique_name()
+note right of Resolver: document_conflict_20260131_143022_a1b2c3d4.docx
+
+Resolver -> Resolver: check_name_exists()
+
+alt Name Collision
+    Resolver -> Resolver: add_counter_suffix()
+    note right: document_conflict_20260131_143022_a1b2c3d4_1.docx
+end
+
+Resolver -> State: rename_local_file(original, conflict_name)
+Resolver -> API: download_remote_to_original()
+Resolver -> State: create_new_item(conflict_name, local_content)
+Resolver -> API: upload_file(conflict_name)
+
+Resolver -> State: clear_conflict(conflict_id)
+Resolver --> DBus: success
+
+deactivate Resolver
+
+UI -> User: "Both versions preserved:\n- document.docx (remote)\n- document_conflict_....docx (your version)"
+
+@enduml

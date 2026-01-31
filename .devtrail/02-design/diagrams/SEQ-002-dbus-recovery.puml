@@ -1,0 +1,122 @@
+@startuml SEQ-002-dbus-recovery
+!theme plain
+title DBus SPOF Recovery - Daemon Resilience
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+participant "GNOME\nExtension" as GNOME
+participant "KDE\nPlasmoid" as KDE
+participant "CLI\nClient" as CLI
+participant "DBus\nSession" as DBus
+participant "lnxdrive\nDaemon" as Daemon
+participant "Sync\nEngine" as Sync
+participant "MS Graph" as API
+
+== Normal Operation ==
+
+GNOME -> DBus: GetSyncStatus()
+DBus -> Daemon: GetSyncStatus()
+Daemon --> DBus: {status: "syncing", progress: 45%}
+DBus --> GNOME: {status: "syncing", progress: 45%}
+
+Sync -> API: upload_file(doc.pdf)
+API --> Sync: success
+
+Daemon -> DBus: emit SyncProgress(doc.pdf, 100%)
+DBus -> GNOME: SyncProgress signal
+DBus -> KDE: SyncProgress signal
+
+== DBus Session Crash ==
+
+note over DBus #ff6666: **DBus SESSION CRASHES**
+
+GNOME -> DBus: GetSyncStatus()
+note right of GNOME #ff6666: Connection lost!
+DBus --x GNOME: org.freedesktop.DBus.Error.NoReply
+
+KDE -> DBus: PauseSync()
+DBus --x KDE: org.freedesktop.DBus.Error.NoReply
+
+note over GNOME,KDE #ffaaaa: All UI clients disconnected\nNo user visibility into sync
+
+== Current Behavior (PROBLEMATIC) ==
+
+note over Daemon #ff6666: Daemon may:\n1. Crash if DBus-dependent\n2. Continue silently\n3. Queue messages forever
+
+Sync -> API: upload_file(report.xlsx)
+API --> Sync: success
+
+note over Sync: Sync continues but\nno one can see status
+
+Daemon -> DBus: emit SyncProgress(...)
+note right of Daemon #ff6666: Signal lost!\nNo DBus to deliver
+
+== Proposed Recovery Flow ==
+
+note over DBus #90EE90: **DBus SESSION RESTARTS**
+
+Daemon -> Daemon: detect_dbus_disconnect()
+activate Daemon
+
+Daemon -> Daemon: start_reconnection_timer(5s)
+
+note over Daemon: Continue sync operations\nQueue notifications
+
+Sync -> API: upload_file(notes.txt)
+API --> Sync: success
+Daemon -> Daemon: queue_notification(SyncComplete)
+
+loop Reconnection attempts (every 5s)
+    Daemon -> DBus: try_connect()
+    alt DBus not ready
+        DBus --x Daemon: connection refused
+    else DBus ready
+        DBus --> Daemon: connected
+    end
+end
+
+Daemon -> DBus: RequestName("org.enigmora.LNXDrive")
+DBus --> Daemon: name acquired
+
+Daemon -> DBus: emit ServiceRestarted()
+deactivate Daemon
+
+== UI Client Reconnection ==
+
+GNOME -> GNOME: detect_service_available()
+GNOME -> DBus: GetSyncStatus()
+DBus -> Daemon: GetSyncStatus()
+Daemon --> DBus: {status: "idle", queued_notifications: 3}
+DBus --> GNOME: status
+
+GNOME -> DBus: GetQueuedNotifications()
+Daemon --> GNOME: [SyncComplete(report.xlsx), SyncComplete(notes.txt), ...]
+
+note over GNOME #90EE90: UI catches up on\nmissed events
+
+KDE -> DBus: Subscribe(SyncProgress)
+DBus --> KDE: subscribed
+
+CLI -> DBus: GetStatus()
+DBus -> Daemon: GetStatus()
+Daemon --> CLI: {status: "idle", last_sync: "2m ago"}
+
+note over GNOME,CLI #90EE90: **ALL CLIENTS RECOVERED**\nNo data loss\nFull visibility restored
+
+== Health Monitoring ==
+
+loop Every 30 seconds
+    Daemon -> DBus: Ping()
+    alt DBus responsive
+        DBus --> Daemon: Pong
+        Daemon -> Daemon: reset_health_counter()
+    else DBus unresponsive
+        Daemon -> Daemon: increment_failure_count()
+        alt failures > 3
+            Daemon -> Daemon: trigger_reconnection()
+        end
+    end
+end
+
+@enduml

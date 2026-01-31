@@ -1,0 +1,207 @@
+@startuml SEQ-005-state-machine-transitions
+!theme plain
+title State Machine Transitions - Error Recovery Analysis
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+participant "FUSE\nHandler" as FUSE
+participant "State\nMachine" as SM
+participant "Sync\nEngine" as Sync
+participant "Recovery\nManager" as Recovery
+participant "State\nRepository" as State
+participant "DBus\nNotifier" as Notify
+participant "User" as User
+
+== Current State Machine (INCOMPLETE) ==
+
+note over SM #ffaaaa
+**Current State Transitions**
+
+Online ──────────────→ Hydrating
+Hydrating ────────────→ Hydrated
+Hydrated ─────────────→ Modified
+Modified ─────────────→ Synced
+Synced ───────────────→ Online (dehydrate)
+
+**ANY STATE** ────────→ Error
+
+**Error ────────────→ ???**
+(No exit transitions defined!)
+end note
+
+== Error Scenario: Network Failure During Hydration ==
+
+FUSE -> SM: request_state_change(file.docx, Hydrating)
+SM -> State: update_state(Hydrating)
+
+Sync -> Sync: download_file()
+note right of Sync #ff6666: Network timeout!
+
+Sync -> SM: report_error(file.docx, NetworkTimeout)
+SM -> State: update_state(Error, reason="network_timeout")
+SM -> Notify: emit ItemStateChanged(Error)
+
+note over SM #ff6666: **STUCK IN ERROR**\nNo recovery path defined\nFile remains inaccessible
+
+User -> FUSE: open(file.docx)
+FUSE -> SM: get_state(file.docx)
+SM --> FUSE: Error(NetworkTimeout)
+FUSE --> User: EIO (I/O Error)
+
+note over User #ff6666: User frustrated!\nCannot access file\nNo way to retry
+
+== Proposed: Error Recovery Transitions ==
+
+note over SM #90EE90
+**Enhanced State Transitions**
+
+Error(Hydration) ─────→ Online (reset)
+Error(Hydration) ─────→ Hydrating (retry)
+Error(Upload) ────────→ Modified (retry)
+Error(Upload) ────────→ Conflicted (escalate)
+Error(Download) ──────→ Online (reset)
+Error(*) ─────────────→ Conflicted (manual)
+end note
+
+== Automatic Retry Recovery ==
+
+Sync -> SM: report_error(file.docx, NetworkTimeout)
+SM -> State: update_state(Error, context=Hydration)
+SM -> Recovery: schedule_retry(file.docx, delay=30s)
+
+Recovery -> Recovery: wait(30s)
+Recovery -> SM: attempt_recovery(file.docx, Strategy::Retry)
+activate SM
+
+SM -> State: get_error_context(file.docx)
+State --> SM: ErrorContext::Hydration
+
+SM -> SM: validate_retry_allowed()
+note right of SM: Check retry count < max (3)
+
+SM -> State: update_state(Hydrating)
+SM -> Sync: retry_hydration(file.docx)
+
+alt Retry Succeeds
+    Sync -> Sync: download_file()
+    Sync --> SM: hydration_complete
+    SM -> State: update_state(Hydrated)
+    SM -> Notify: emit ItemStateChanged(Hydrated)
+else Retry Fails Again
+    Sync --> SM: error(NetworkTimeout)
+    SM -> Recovery: increment_retry_count()
+    alt Retries < Max
+        SM -> Recovery: schedule_retry(file.docx, delay=60s)
+        note right: Exponential backoff
+    else Retries Exhausted
+        SM -> SM: escalate_to_manual()
+    end
+end
+
+deactivate SM
+
+== Manual Recovery (User Intervention) ==
+
+SM -> SM: escalate_to_manual(file.docx)
+SM -> State: update_state(Error, requires_user=true)
+SM -> Notify: emit ErrorRequiresAttention(file.docx, options)
+
+Notify -> User: "File sync failed after 3 retries.\nChoose recovery option:"
+
+User -> Notify: select_recovery(RESET_TO_ONLINE)
+Notify -> SM: user_recovery_choice(file.docx, RESET_TO_ONLINE)
+activate SM
+
+SM -> State: clear_local_content(file.docx)
+SM -> State: update_state(Online)
+SM -> Notify: emit ItemStateChanged(Online)
+
+deactivate SM
+
+note over User #90EE90: File is now a placeholder\nWill download fresh on next access
+
+== Recovery Options by Error Context ==
+
+note over Recovery
+**Recovery Strategy Matrix**
+
+| Error Context | Auto Retry | Reset | Escalate |
+|---------------|------------|-------|----------|
+| Hydration     | ✓          | ✓     | ✓        |
+| Upload        | ✓          | ✗     | ✓        |
+| Download      | ✓          | ✓     | ✓        |
+| Conflict      | ✗          | ✗     | ✓        |
+| Corruption    | ✗          | ✓     | ✓        |
+end note
+
+== State Transition Audit ==
+
+SM -> State: log_transition(file.docx, Error, Hydrating, "retry_1")
+State -> State: INSERT INTO audit_log
+
+note over State
+audit_log entry:
+{
+  item_id: "doc1",
+  from_state: "Error",
+  to_state: "Hydrating",
+  trigger: "auto_retry",
+  context: {
+    error_reason: "network_timeout",
+    retry_count: 1,
+    recovery_strategy: "retry"
+  },
+  timestamp: "2026-01-31T14:30:22Z"
+}
+end note
+
+== Complete State Diagram ==
+
+note over SM #LightBlue
+```
+         ┌──────────────────────────────────────────────┐
+         │                                              │
+         ▼                                              │
+     ┌────────┐    open()    ┌───────────┐            │
+     │ Online │─────────────→│ Hydrating │            │
+     └────────┘              └─────┬─────┘            │
+         ▲                         │                   │
+         │                    complete                 │
+         │                         ▼                   │
+         │                   ┌──────────┐              │
+    dehydrate                │ Hydrated │              │
+         │                   └─────┬────┘              │
+         │                         │                   │
+         │                     modify                  │
+         │                         ▼                   │
+         │                   ┌──────────┐    sync     │
+         │                   │ Modified │────────────→│
+         │                   └────┬─────┘             │
+         │                        │                    │
+         │                   conflict                  │
+         │                        ▼                    │
+         │                  ┌───────────┐              │
+         │                  │Conflicted │              │
+         │                  └─────┬─────┘              │
+         │                        │                    │
+         │                   resolve                   │
+         │                        │                    │
+         │                        ▼                    │
+         │                   ┌────────┐                │
+         └───────────────────│ Synced │────────────────┘
+                             └────────┘
+
+    ┌─────────────────────────────────────────────────────┐
+    │                       ERROR                          │
+    │  ┌─────────────────────────────────────────────┐    │
+    │  │ Recovery Transitions:                        │    │
+    │  │  • retry    → Original state (Hydrating,etc)│    │
+    │  │  • reset    → Online                        │    │
+    │  │  • escalate → Conflicted                    │    │
+    │  └─────────────────────────────────────────────┘    │
+    └─────────────────────────────────────────────────────┘
+```
+end note
+
+@enduml
