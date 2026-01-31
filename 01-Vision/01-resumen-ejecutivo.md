@@ -5,11 +5,11 @@
 
 ---
 
-Este documento presenta una propuesta arquitectónica para construir un cliente de sincronización de OneDrive para Linux que se distinga fundamentalmente de las soluciones existentes. El enfoque no es "otro cliente que sincroniza", sino un **sistema de sincronización explicable, gobernable y adaptable** que trata las interfaces de usuario como componentes intercambiables.
+Este documento presenta una propuesta arquitectónica para construir un cliente de sincronización de almacenamiento en la nube para Linux que se distinga fundamentalmente de las soluciones existentes. El enfoque no es "otro cliente que sincroniza", sino un **sistema de sincronización explicable, gobernable y adaptable** que trata las interfaces de usuario como componentes intercambiables y soporta múltiples proveedores cloud.
 
 ## Visión del Proyecto
 
-**LNXDrive** es un cliente de OneDrive para Linux diseñado desde cero con principios de arquitectura limpia y hexagonal, que permite:
+**LNXDrive** es un cliente de almacenamiento en la nube para Linux diseñado desde cero con principios de arquitectura limpia y hexagonal, que permite:
 
 - **Sincronización explicable**: El usuario siempre sabe por qué algo falló o no se sincronizó
 - **Gobernanza declarativa**: Configuración versionable en YAML, no flags crípticos

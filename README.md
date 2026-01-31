@@ -1,6 +1,6 @@
 # LNXDrive Guide
 
-Technical design and development documentation for **LNXDrive**, a native OneDrive synchronization client for Linux.
+Technical design and development documentation for **LNXDrive**, a native cloud storage synchronization client for Linux supporting multiple providers (OneDrive, Google Drive, Dropbox, and more).
 
 ## About LNXDrive
 

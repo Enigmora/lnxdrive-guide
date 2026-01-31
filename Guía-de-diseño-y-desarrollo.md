@@ -1,6 +1,6 @@
 # Guía de Diseño y Desarrollo de LNXDrive
 
-> **Proyecto:** LNXDrive — Cliente OneDrive para Linux
+> **Proyecto:** LNXDrive — Cliente de almacenamiento en la nube para Linux
 > **Versión:** 1.0
 > **Última actualización:** Enero 2026
 
@@ -8,7 +8,7 @@
 
 ## Introducción
 
-Esta guía contiene la documentación técnica completa para el diseño y desarrollo de **LNXDrive**, un cliente de sincronización de OneDrive para Linux con arquitectura hexagonal, Files-on-Demand real, y soporte multi-entorno de escritorio.
+Esta guía contiene la documentación técnica completa para el diseño y desarrollo de **LNXDrive**, un cliente de sincronización de almacenamiento en la nube para Linux con arquitectura hexagonal, Files-on-Demand real, y soporte multi-entorno de escritorio. Diseñado para soportar múltiples proveedores (OneDrive, Google Drive, Dropbox, entre otros).
 
 ### Cómo usar esta guía
 

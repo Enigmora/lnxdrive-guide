@@ -7,7 +7,7 @@
 
 ## Lo que hace único a LNXDrive
 
-> **"LNXDrive no es otro cliente de OneDrive. Es la primera herramienta de sincronización diseñada para ser explicable, gobernable y adaptable al entorno de escritorio Linux que uses."**
+> **"LNXDrive no es otro cliente de almacenamiento en la nube. Es la primera herramienta de sincronización multi-proveedor diseñada para ser explicable, gobernable y adaptable al entorno de escritorio Linux que uses."**
 
 ### Comparativa Detallada
 
