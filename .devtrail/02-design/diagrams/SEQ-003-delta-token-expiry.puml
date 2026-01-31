@@ -1,0 +1,135 @@
+@startuml SEQ-003-delta-token-expiry
+!theme plain
+title Delta Token Expiration - Recovery Flow
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+participant "Sync\nScheduler" as Sched
+participant "Delta\nSync" as Delta
+participant "MS Graph\nClient" as Graph
+participant "Microsoft\nGraph API" as API
+participant "State\nRepository" as State
+participant "DBus\nNotifier" as Notify
+
+== Normal Delta Sync ==
+
+Sched -> Delta: trigger_sync()
+activate Delta
+
+Delta -> State: get_delta_token()
+State --> Delta: token = "aWQ9..."
+
+Delta -> Graph: get_delta(token)
+Graph -> API: GET /me/drive/root/delta?token=aWQ9...
+API --> Graph: 200 OK\n{changes: [...], @odata.deltaLink: "new_token"}
+Graph --> Delta: DeltaResponse
+
+Delta -> Delta: process_changes()
+Delta -> State: save_delta_token("new_token")
+Delta --> Sched: sync_complete
+deactivate Delta
+
+== Delta Token Expired (Current: No Handling) ==
+
+Sched -> Delta: trigger_sync()
+activate Delta
+
+Delta -> State: get_delta_token()
+State --> Delta: token = "old_expired_token"
+
+Delta -> Graph: get_delta(token)
+Graph -> API: GET /me/drive/root/delta?token=old_expired_token
+
+API --> Graph: **410 Gone**\n{error: "resyncRequired"}
+
+note over Graph #ff6666: **CURRENT BEHAVIOR**\nNo specific handling for 410
+
+Graph --> Delta: Error::ApiError(410)
+Delta --> Sched: sync_failed(ApiError)
+
+note over Sched,Delta #ff6666: Sync fails silently\nUser not notified\nRetries same token forever
+
+deactivate Delta
+
+== Proposed: Graceful Recovery ==
+
+Sched -> Delta: trigger_sync()
+activate Delta
+
+Delta -> State: get_delta_token()
+State --> Delta: token = "old_expired_token"
+
+Delta -> Graph: get_delta(token)
+Graph -> API: GET /me/drive/root/delta?token=old_expired_token
+
+API --> Graph: **410 Gone**
+
+Graph -> Graph: detect_token_expiry()
+note right of Graph #90EE90: Recognize 410 as\ntoken expiration
+
+Graph --> Delta: Error::DeltaTokenExpired
+
+Delta -> Delta: initiate_full_resync()
+activate Delta #LightBlue
+
+Delta -> Notify: emit(ResyncRequired, reason="token_expired")
+Notify -> Notify: notify_user("Full resync required")
+
+Delta -> State: clear_delta_token()
+Delta -> State: mark_all_items_stale()
+
+note over Delta: Begin full enumeration
+
+Delta -> Graph: list_all_items(root)
+Graph -> API: GET /me/drive/root/children
+API --> Graph: {items: [...], @odata.nextLink: "..."}
+
+loop For each page
+    Graph -> API: GET nextLink
+    API --> Graph: {items: [...]}
+    Delta -> Delta: process_items(items)
+    Delta -> Notify: emit(ResyncProgress, {processed: N, total: M})
+end
+
+Delta -> Graph: get_new_delta_token()
+Graph -> API: GET /me/drive/root/delta
+API --> Graph: {changes: [], @odata.deltaLink: "fresh_token"}
+
+Delta -> State: save_delta_token("fresh_token")
+
+deactivate Delta
+
+Delta -> Notify: emit(ResyncComplete, {items_processed: 5000})
+Notify -> Notify: notify_user("Resync complete: 5000 files")
+
+Delta --> Sched: sync_complete
+deactivate Delta
+
+== Token Refresh Strategy (Preventive) ==
+
+note over Sched: Proactive token refresh\nbefore expiration
+
+Sched -> Delta: check_token_health()
+activate Delta
+
+Delta -> State: get_delta_token_metadata()
+State --> Delta: {token: "...", last_used: "90 days ago"}
+
+alt Token older than 60 days
+    Delta -> Delta: schedule_proactive_refresh()
+    note right of Delta #90EE90: Refresh before\nMicrosoft invalidates
+
+    Delta -> Graph: get_fresh_delta(null)
+    note right of Graph: Request fresh token\nwithout old one
+
+    Graph -> API: GET /me/drive/root/delta
+    API --> Graph: {deltaLink: "fresh_token"}
+
+    Delta -> State: save_delta_token("fresh_token")
+    Delta -> State: update_token_timestamp()
+end
+
+deactivate Delta
+
+@enduml

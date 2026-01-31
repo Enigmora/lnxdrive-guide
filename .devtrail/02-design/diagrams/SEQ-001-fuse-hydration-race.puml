@@ -1,0 +1,110 @@
+@startuml SEQ-001-fuse-hydration-race
+!theme plain
+title FUSE Write During Hydration - Race Condition Analysis
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+participant "Application\n(Process A)" as AppA
+participant "Application\n(Process B)" as AppB
+participant "FUSE\nHandler" as FUSE
+participant "Hydration\nManager" as HM
+participant "State\nManager" as SM
+participant "SQLite" as DB
+participant "MS Graph\nAPI" as API
+
+== Current Behavior (VULNERABLE) ==
+
+AppA -> FUSE: open(file.docx, O_RDONLY)
+activate FUSE
+
+FUSE -> SM: get_state(file.docx)
+SM -> DB: SELECT state FROM sync_items
+DB --> SM: state = Online
+SM --> FUSE: ItemState::Online
+
+FUSE -> HM: trigger_hydration(file.docx)
+activate HM
+HM -> SM: set_state(Hydrating)
+SM -> DB: UPDATE state = Hydrating
+
+HM -> API: download_file(remote_id)
+activate API
+
+note over HM,API: Download in progress...\n(large file, takes time)
+
+API --> HM: chunk 1 (0-1MB)
+HM -> FUSE: write_chunk(0-1MB)
+
+AppB -> FUSE: open(file.docx, O_WRONLY)
+note right of AppB #ff6666: Process B wants to write\nwhile hydration is active
+
+FUSE -> SM: get_state(file.docx)
+SM --> FUSE: ItemState::Hydrating
+
+note over FUSE #ff6666: **RACE CONDITION**\nNo lock prevents write!
+
+AppB -> FUSE: write(offset=1.5MB, data)
+FUSE -> FUSE: write_to_file(1.5MB)
+note right of FUSE #ff6666: Write succeeds to\npartially hydrated file!
+
+API --> HM: chunk 2 (1-2MB)
+HM -> FUSE: write_chunk(1-2MB)
+note over HM,FUSE #ff6666: **OVERWRITES Process B's data!**
+
+API --> HM: chunk 3 (2-3MB)
+deactivate API
+HM -> FUSE: write_chunk(2-3MB)
+
+HM -> SM: set_state(Hydrated)
+deactivate HM
+
+FUSE --> AppA: file handle
+deactivate FUSE
+
+note over AppA,API #ff6666: **RESULT: FILE CORRUPTED**\nProcess B's modifications lost\nMixed content from remote + partial local
+
+== Proposed Fix: Exclusive Lock ==
+
+AppA -> FUSE: open(file.docx, O_RDONLY)
+activate FUSE
+
+FUSE -> SM: get_state(file.docx)
+SM --> FUSE: ItemState::Online
+
+FUSE -> HM: acquire_hydration_lock(file.docx)
+HM --> FUSE: lock acquired
+
+FUSE -> HM: trigger_hydration(file.docx)
+activate HM
+
+AppB -> FUSE: open(file.docx, O_WRONLY)
+FUSE -> HM: try_acquire_write_lock(file.docx)
+HM --> FUSE: **EBUSY** (hydration in progress)
+FUSE --> AppB: error: EBUSY
+
+note right of AppB #90EE90: Write blocked until\nhydration completes
+
+HM -> API: download_file(remote_id)
+API --> HM: complete file
+HM -> HM: write_complete_file()
+HM -> SM: set_state(Hydrated)
+HM -> HM: release_hydration_lock()
+deactivate HM
+
+FUSE --> AppA: file handle
+deactivate FUSE
+
+AppB -> FUSE: open(file.docx, O_WRONLY)
+FUSE -> HM: try_acquire_write_lock(file.docx)
+HM --> FUSE: lock acquired
+FUSE --> AppB: file handle
+
+AppB -> FUSE: write(offset=1.5MB, data)
+FUSE -> FUSE: write_to_file(1.5MB)
+FUSE -> SM: set_state(Modified)
+FUSE --> AppB: success
+
+note over AppA,API #90EE90: **RESULT: NO CORRUPTION**\nHydration completes first\nThen write proceeds safely
+
+@enduml
