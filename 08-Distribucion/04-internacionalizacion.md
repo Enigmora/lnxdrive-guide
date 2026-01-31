@@ -441,15 +441,15 @@ Name=LNXDrive
 Name[es]=LNXDrive
 GenericName=Cloud Storage Client
 GenericName[es]=Cliente de Almacenamiento en la Nube
-Comment=Sync your files with OneDrive
-Comment[es]=Sincroniza tus archivos con OneDrive
+Comment=Sync your files with cloud storage providers
+Comment[es]=Sincroniza tus archivos con proveedores de almacenamiento en la nube
 Exec=lnxdrive-gnome
 Icon=org.enigmora.LNXDrive
 Terminal=false
 Type=Application
 Categories=Network;FileTransfer;
-Keywords=onedrive;cloud;sync;microsoft;
-Keywords[es]=onedrive;nube;sincronizar;microsoft;
+Keywords=cloud;sync;onedrive;gdrive;dropbox;storage;
+Keywords[es]=nube;sincronizar;onedrive;gdrive;dropbox;almacenamiento;
 ```
 
 #### Archivo AppStream Metainfo
@@ -461,16 +461,16 @@ Keywords[es]=onedrive;nube;sincronizar;microsoft;
   <id>org.enigmora.LNXDrive</id>
   <name>LNXDrive</name>
   <name xml:lang="es">LNXDrive</name>
-  <summary>OneDrive client for Linux desktops</summary>
-  <summary xml:lang="es">Cliente de OneDrive para escritorios Linux</summary>
+  <summary>Cloud storage client for Linux desktops</summary>
+  <summary xml:lang="es">Cliente de almacenamiento en la nube para escritorios Linux</summary>
   <description>
     <p>
-      LNXDrive is a native OneDrive client for Linux that integrates
-      seamlessly with your desktop environment.
+      LNXDrive is a native cloud storage client for Linux that integrates
+      seamlessly with your desktop environment. Supports OneDrive, Google Drive, Dropbox, and more.
     </p>
     <p xml:lang="es">
-      LNXDrive es un cliente nativo de OneDrive para Linux que se integra
-      perfectamente con tu entorno de escritorio.
+      LNXDrive es un cliente nativo de almacenamiento en la nube para Linux que se integra
+      perfectamente con tu entorno de escritorio. Soporta OneDrive, Google Drive, Dropbox, y más.
     </p>
     <p>Features include:</p>
     <p xml:lang="es">Caracteristicas incluidas:</p>
