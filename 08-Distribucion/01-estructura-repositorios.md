@@ -79,7 +79,8 @@ github.com/enigmora/
 │   │   ├── lnxdrive-graph/         # Cliente Microsoft Graph
 │   │   ├── lnxdrive-cache/         # Sistema de cache
 │   │   ├── lnxdrive-conflict/      # Resolucion de conflictos
-│   │   └── lnxdrive-audit/         # Sistema de auditoria
+│   │   ├── lnxdrive-audit/         # Sistema de auditoria
+│   │   └── lnxdrive-telemetry/     # Agente de telemetria (proceso separado)
 │   ├── tests/                      # Tests de integracion
 │   ├── docs/                       # Documentacion tecnica
 │   └── .github/workflows/
