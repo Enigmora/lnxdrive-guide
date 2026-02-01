@@ -276,8 +276,177 @@ pub enum FileStatus {
 
 ---
 
+## ⚠️ Riesgos y Mitigaciones
+
+### A1: DBus Single Point of Failure
+
+| Atributo | Valor |
+|----------|-------|
+| **Prioridad** | P1 (Alta) |
+| **Componentes** | DBus Service, UI Adapters, Daemon |
+| **Simulación** | SIM-L1-001 |
+
+**Descripción:**
+Todos los adaptadores de UI dependen exclusivamente de DBus. Si el session bus falla, todas las interfaces quedan inoperativas aunque el daemon continúe funcionando.
+
+**Mitigación:** Ver sección en [Motor de Sincronización](../04-Componentes/07-motor-sincronizacion.md#a1-dbus-single-point-of-failure) para implementación de reconexión automática.
+
+---
+
+### D1: DBus Authentication Bypass
+
+| Atributo | Valor |
+|----------|-------|
+| **Prioridad** | P0 (Crítica) |
+| **Componentes** | DBus interfaces, PolicyKit |
+| **Simulación** | SIM-L1-002 |
+
+**Descripción:**
+Por defecto, cualquier proceso del usuario puede llamar métodos DBus. Sin autenticación, un proceso malicioso podría manipular la sincronización, robar tokens, o causar denegación de servicio.
+
+**Mitigación Propuesta:**
+```xml
+<!-- /usr/share/polkit-1/actions/org.enigmora.lnxdrive.policy -->
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+  "-//freedesktop//DTD polkit Policy Configuration 1.0//EN"
+  "http://polkit.freedesktop.org/1.0/policyconfig.dtd">
+<policyconfig>
+  <action id="org.enigmora.lnxdrive.admin">
+    <description>Manage LNXDrive sync settings</description>
+    <message>Authentication is required to manage sync</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.enigmora.lnxdrive.sensitive">
+    <description>Access sensitive operations</description>
+    <message>Authentication required for sensitive operations</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <!-- Requiere autenticación incluso para sesión activa -->
+      <allow_active>auth_self</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.imply">
+      org.enigmora.lnxdrive.admin
+    </annotate>
+  </action>
+</policyconfig>
+```
+
+**Tests Requeridos:**
+- `test_polkit_required_for_sensitive_ops`
+- `test_unauthorized_process_rejected`
+
+---
+
+### D3: DBus Rate Limiting Absent
+
+| Atributo | Valor |
+|----------|-------|
+| **Prioridad** | P1 (Alta) |
+| **Componentes** | DBus service, Method handlers |
+| **Simulación** | SIM-L1-002 |
+
+**Descripción:**
+Sin rate limiting, un cliente malicioso puede hacer flooding de llamadas DBus, causando denegación de servicio al daemon.
+
+**Mitigación Propuesta:**
+```rust
+use governor::{Quota, RateLimiter};
+
+pub struct DbusRateLimiter {
+    // Límite por cliente (identificado por unique name)
+    per_client: DashMap<String, RateLimiter<...>>,
+    // Límite global
+    global: RateLimiter<...>,
+}
+
+impl DbusRateLimiter {
+    pub fn check(&self, sender: &str) -> Result<(), DbusError> {
+        // 1. Verificar límite global (1000 req/sec)
+        if self.global.check().is_err() {
+            return Err(DbusError::GlobalRateLimited);
+        }
+        
+        // 2. Verificar límite por cliente (100 req/sec)
+        let client_limiter = self.per_client
+            .entry(sender.to_string())
+            .or_insert_with(|| RateLimiter::direct(Quota::per_second(100)));
+        
+        if client_limiter.check().is_err() {
+            return Err(DbusError::ClientRateLimited { sender: sender.to_string() });
+        }
+        
+        Ok(())
+    }
+}
+```
+
+**Tests Requeridos:**
+- `test_rate_limit_blocks_flooding`
+- `test_legitimate_client_not_affected`
+
+---
+
+### F3: No DBus Interface Versioning
+
+| Atributo | Valor |
+|----------|-------|
+| **Prioridad** | P3 (Baja) |
+| **Componentes** | DBus interfaces, Compatibility |
+| **Simulación** | SIM-L4-004 |
+
+**Descripción:**
+Si los métodos DBus cambian entre versiones, clientes antiguos pueden fallar. Sin versionado de interfaces, no hay forma de mantener compatibilidad hacia atrás.
+
+**Mitigación Propuesta:**
+```xml
+<!-- Interfaces versionadas -->
+<interface name="org.enigmora.LNXDrive.Sync">
+  <!-- API estable v1 -->
+</interface>
+
+<interface name="org.enigmora.LNXDrive.Sync2">
+  <!-- Nueva API v2 con cambios incompatibles -->
+</interface>
+```
+
+```rust
+impl DbusService {
+    fn register_interfaces(&self, conn: &Connection) {
+        // Registrar todas las versiones soportadas
+        conn.register_object("/org/enigmora/LNXDrive", SyncV1Interface)?;
+        conn.register_object("/org/enigmora/LNXDrive", SyncV2Interface)?;
+        
+        // Deprecated interfaces muestran warning pero siguen funcionando
+    }
+}
+```
+
+**Tests Requeridos:**
+- `test_v1_client_with_v2_server`
+- `test_deprecation_warning_logged`
+
+---
+
+> [!NOTE]  
+> Para la matriz completa de riesgos y simulaciones, ver:
+> - [TRACE-risks-mitigations.md](../.devtrail/02-design/risk-analysis/TRACE-risks-mitigations.md)
+> - [RISK-002-security-vulns.md](../.devtrail/02-design/risk-analysis/RISK-002-security-vulns.md)
+>
+> Diagrama de secuencia relacionado:
+> - [SEQ-002-dbus-recovery.puml](../.devtrail/02-design/diagrams/SEQ-002-dbus-recovery.puml)
+
+---
+
 ## Ver tambien
 
 - [01-estructura-repositorios.md](01-estructura-repositorios.md) - Estructura de repositorios
 - [03-gobernanza-proyecto.md](03-gobernanza-proyecto.md) - Gobernanza y observabilidad
 - [Capas y Puertos](../03-Arquitectura/02-capas-y-puertos.md) - Diagrama de componentes
+

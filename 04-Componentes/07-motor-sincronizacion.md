@@ -154,9 +154,180 @@ trait IMetricsExporter {
 
 ---
 
+## ⚠️ Riesgos y Mitigaciones
+
+Esta sección documenta riesgos identificados durante la simulación arquitectónica y sus mitigaciones propuestas.
+
+### B1: No Error Recovery Transitions
+
+| Atributo | Valor |
+|----------|-------|
+| **Prioridad** | P0 (Crítica) |
+| **Componentes** | State Machine, SyncItem, Error handling |
+| **Simulación** | SIM-L2-001 |
+
+**Descripción:**
+La máquina de estados actual no define transiciones de recuperación desde el estado `Error`. Un item que entra en `Error` podría quedarse bloqueado indefinidamente sin un camino claro de recuperación.
+
+**Escenarios de Fallo:**
+1. Error de red transitorio marca archivo como `Error`, no hay retry automático
+2. Usuario corrige problema manualmente pero el sistema no detecta recuperación
+3. Acumulación de items en estado `Error` sin mecanismo de limpieza
+
+**Mitigación Propuesta:**
+```rust
+// Transiciones de recuperación desde Error
+enum ErrorRecovery {
+    AutoRetry { max_attempts: u32, backoff: Duration },
+    ManualRetry,
+    UserAction { action_type: UserActionType },
+}
+
+impl StateMachine {
+    fn transition_from_error(&mut self, item: &mut SyncItem, trigger: ErrorRecoveryTrigger) -> Result<ItemState> {
+        match (&item.state, trigger) {
+            (ItemState::Error(reason), ErrorRecoveryTrigger::Retry) => {
+                // Volver al estado anterior para reintentar
+                Ok(item.previous_state.clone())
+            }
+            (ItemState::Error(_), ErrorRecoveryTrigger::UserFix) => {
+                // Usuario confirmó corrección, reiniciar sync
+                Ok(ItemState::Modified)
+            }
+            _ => Err(InvalidTransition)
+        }
+    }
+}
+```
+
+**Tests Requeridos:**
+- `test_error_to_hydrating_transition`
+- `test_error_recovery_after_network_restore`
+- `test_max_retry_exceeded_stays_error`
+
+---
+
+### A1: DBus Single Point of Failure
+
+| Atributo | Valor |
+|----------|-------|
+| **Prioridad** | P1 (Alta) |
+| **Componentes** | DBus Service, UI Adapters, Daemon |
+| **Simulación** | SIM-L1-001, SIM-L1-002 |
+
+**Descripción:**
+Todos los adaptadores de UI (GNOME, KDE, Cosmic, CLI) dependen exclusivamente de DBus para comunicarse con el daemon. Si DBus falla, todas las interfaces quedan inoperativas aunque el daemon continúe funcionando.
+
+**Escenarios de Fallo:**
+1. DBus session daemon crash
+2. Overflow de cola de mensajes DBus
+3. Timeout del bus bajo carga
+4. Colisión de nombres de servicio
+
+**Mitigación Propuesta:**
+```rust
+pub struct DbusConnectionManager {
+    connection: Option<Connection>,
+    reconnect_attempts: AtomicU32,
+    fallback_socket: Option<UnixSocket>,
+}
+
+impl DbusConnectionManager {
+    pub async fn get_connection(&self) -> Result<&Connection> {
+        if self.connection.is_none() || !self.connection.as_ref().unwrap().is_alive() {
+            self.reconnect().await?;
+        }
+        self.connection.as_ref().ok_or(DbusError::NotConnected)
+    }
+    
+    async fn reconnect(&mut self) -> Result<()> {
+        for attempt in 0..MAX_RECONNECT_ATTEMPTS {
+            match Connection::session().await {
+                Ok(conn) => {
+                    self.connection = Some(conn);
+                    return Ok(());
+                }
+                Err(e) => {
+                    tokio::time::sleep(backoff(attempt)).await;
+                }
+            }
+        }
+        Err(DbusError::ReconnectFailed)
+    }
+}
+```
+
+**Tests Requeridos:**
+- `test_dbus_reconnect_after_crash`
+- `test_daemon_continues_sync_without_dbus`
+- `test_ui_recovers_after_dbus_restore`
+
+---
+
+### B4: Lifecycle Undefined (Resource Leaks)
+
+| Atributo | Valor |
+|----------|-------|
+| **Prioridad** | P3 (Baja) |
+| **Componentes** | Observers, Handles, WatchHandles |
+| **Simulación** | SIM-L2-005 |
+
+**Descripción:**
+No están definidos los ciclos de vida para observers, handles de archivo y watches. Esto puede causar memory leaks o recursos zombie cuando los componentes no se desregistran correctamente.
+
+**Escenarios de Fallo:**
+1. Observer registrado nunca se desregistra (UI cerrada sin cleanup)
+2. WatchHandle perdido sin llamar a unwatch
+3. Accumulation de callbacks en largo plazo
+
+**Mitigación Propuesta:**
+```rust
+pub struct ObserverRegistry {
+    observers: DashMap<ObserverId, WeakRef<dyn IStateObserver>>,
+    gc_interval: Duration,
+}
+
+impl ObserverRegistry {
+    pub fn register(&self, observer: Arc<dyn IStateObserver>) -> ObserverHandle {
+        let id = ObserverId::new();
+        self.observers.insert(id, Arc::downgrade(&observer));
+        ObserverHandle { id, registry: self }
+    }
+    
+    pub fn gc(&self) {
+        self.observers.retain(|_, weak| weak.strong_count() > 0);
+    }
+}
+
+impl Drop for ObserverHandle {
+    fn drop(&mut self) {
+        self.registry.observers.remove(&self.id);
+    }
+}
+```
+
+**Tests Requeridos:**
+- `test_observer_auto_cleanup_on_drop`
+- `test_weak_ref_gc_after_ui_close`
+- `test_no_memory_leak_long_running`
+
+---
+
+> [!NOTE]
+> Para la matriz completa de riesgos y simulaciones, ver:
+> - [TRACE-risks-mitigations.md](../.devtrail/02-design/risk-analysis/TRACE-risks-mitigations.md)
+> - [RISK-001-critical-paths.md](../.devtrail/02-design/risk-analysis/RISK-001-critical-paths.md)
+>
+> Diagramas de secuencia relacionados:
+> - [SEQ-005-state-machine-transitions.puml](../.devtrail/02-design/diagrams/SEQ-005-state-machine-transitions.puml)
+> - [SEQ-002-dbus-recovery.puml](../.devtrail/02-design/diagrams/SEQ-002-dbus-recovery.puml)
+
+---
+
 ## Ver tambien
 
 - [[03-Arquitectura/01-arquitectura-hexagonal|Arquitectura Hexagonal]] - Filosofia arquitectonica del sistema
 - [[04-Componentes/08-microsoft-graph|Microsoft Graph]] - Integracion con la API de OneDrive
 - [[04-Componentes/11-conflictos|Resolucion de Conflictos]] - Manejo visual de conflictos
 - [[04-Componentes/12-auditoria|Auditoria]] - Sistema de trazabilidad
+

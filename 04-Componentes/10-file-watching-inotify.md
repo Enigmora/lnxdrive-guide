@@ -802,8 +802,139 @@ file_watching:
 
 ---
 
+## ⚠️ Riesgos y Mitigaciones
+
+### B5: IN_Q_OVERFLOW (inotify Queue Overflow)
+
+| Atributo | Valor |
+|----------|-------|
+| **Prioridad** | P1 (Alta) |
+| **Componentes** | inotify kernel buffer, Event Router |
+| **Simulación** | SIM-L3-004 |
+
+**Descripción:**
+Cuando el buffer del kernel para eventos inotify se llena más rápido de lo que la aplicación puede consumirlos, el kernel genera un evento `IN_Q_OVERFLOW` y descarta eventos. Esto causa pérdida silenciosa de cambios de archivos.
+
+**Escenarios de Fallo:**
+1. Build masivo genera miles de eventos en milisegundos
+2. Copia o extracción de muchos archivos
+3. Aplicación ocupada procesando evento largo mientras llegan más
+4. Buffer del kernel configurado demasiado pequeño
+
+**Mitigación Propuesta:**
+```rust
+impl EventRouter {
+    pub fn handle_event(&mut self, event: InotifyEvent) -> Result<()> {
+        match event.mask {
+            EventMask::Q_OVERFLOW => {
+                // Overflow detectado - lanzar full scan
+                self.metrics.record_overflow();
+                
+                log::warn!("inotify queue overflow detected, initiating full scan");
+                
+                // Notificar al usuario
+                self.notification_service.notify(Notification {
+                    title: "Escaneando cambios",
+                    body: "Se detectaron muchos cambios. Verificando consistencia...",
+                    priority: Priority::Low,
+                }).await?;
+                
+                // Encolar full scan
+                self.trigger_full_scan(FullScanReason::QueueOverflow).await
+            }
+            _ => self.process_normal_event(event).await,
+        }
+    }
+    
+    async fn trigger_full_scan(&self, reason: FullScanReason) -> Result<()> {
+        // Escanear todos los directorios observados
+        for (path, _) in self.watched_paths.iter() {
+            self.scan_directory_recursive(path).await?;
+        }
+        Ok(())
+    }
+}
+```
+
+**Tests Requeridos:**
+- `test_inotify_overflow_triggers_scan`
+- `test_full_scan_recovers_missed_changes`
+- `test_bulk_file_operations_detected`
+
+---
+
+### C3: inotify Watch Eviction During Access
+
+| Atributo | Valor |
+|----------|-------|
+| **Prioridad** | P1 (Alta) |
+| **Componentes** | WatchManager, LRU/LFU eviction, Priority system |
+| **Simulación** | SIM-L3-004 |
+
+**Descripción:**
+El algoritmo de evicción puede remover un watch de inotify de un directorio justo cuando un archivo dentro de ese directorio está siendo accedido frecuentemente, causando pérdida de eventos.
+
+**Escenarios de Fallo:**
+1. Usuario abre archivo, el directorio padre se evicta segundos después
+2. Build compila en un directorio que perdió watch
+3. Race entre actualización de prioridad y evicción
+
+**Mitigación Propuesta:**
+```rust
+impl WatchManager {
+    pub fn evict_for_new_watch(&mut self, new_priority: WatchPriority) -> Option<PathBuf> {
+        // Bloquear evicción si hay acceso activo
+        let candidates: Vec<_> = self.watches.iter()
+            .filter(|(_, info)| {
+                // No evictar si tiene handles abiertos
+                if self.open_handles.contains(&info.path) {
+                    return false;
+                }
+                
+                // No evictar si acceso reciente (< 1 minuto)
+                let elapsed = info.last_access.elapsed().unwrap_or_default();
+                if elapsed < Duration::from_secs(60) {
+                    return false;
+                }
+                
+                // Solo evictar si prioridad menor
+                info.priority < new_priority && !info.is_pinned
+            })
+            .collect();
+        
+        // Seleccionar víctima con menor score
+        candidates.into_iter()
+            .min_by_key(|(_, info)| {
+                let freq_score = self.access_frequency.get(&info.handle)
+                    .map(|s| s.score())
+                    .unwrap_or(0.0);
+                OrderedFloat(freq_score) // Menor score = primera víctima
+            })
+            .map(|(_, info)| {
+                let path = info.path.clone();
+                self.move_to_polling(&info.handle);
+                path
+            })
+    }
+}
+```
+
+**Tests Requeridos:**
+- `test_active_file_prevents_dir_eviction`
+- `test_recently_accessed_not_evicted`
+- `test_eviction_grace_period`
+
+---
+
+> [!NOTE]
+> Para la matriz completa de riesgos y simulaciones, ver:
+> - [TRACE-risks-mitigations.md](../.devtrail/02-design/risk-analysis/TRACE-risks-mitigations.md)
+
+---
+
 ## Ver tambien
 
 - [[04-Componentes/07-motor-sincronizacion|Motor de Sincronizacion]] - Nucleo del sistema
 - [[03-Arquitectura/01-arquitectura-hexagonal|Arquitectura Hexagonal]] - Puertos y adaptadores
 - [[04-Componentes/12-auditoria|Auditoria]] - Registro de eventos de watching
+
