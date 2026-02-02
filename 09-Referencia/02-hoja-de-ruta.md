@@ -94,9 +94,15 @@ La hoja de ruta de LNXDrive está organizada en 11 fases (0-10), desde la infrae
 - [ ] Métricas Prometheus
 - [ ] Logs estructurados JSON
 - [ ] Comando `lnxdrive explain`
+- [ ] Sistema de telemetría opt-in (`lnxdrive-telemetry`)
+  - [ ] Agente como proceso separado
+  - [ ] Backend OpenTelemetry en Google Cloud
+  - [ ] Anonimización de datos sensibles
+  - [ ] CLI: subcomando `report`
 
 **Entregables:**
 - `lnxdrive-audit` crate
+- `lnxdrive-telemetry` binario
 - Dashboard de métricas
 - Herramientas de diagnóstico
 - Documentación de troubleshooting

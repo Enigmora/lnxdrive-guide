@@ -40,6 +40,13 @@ lnxdrive metrics --json            # Formato JSON
 lnxdrive config show               # Mostrar configuracion actual
 lnxdrive config set conflicts.default-strategy keep-local
 lnxdrive config validate           # Validar archivo YAML
+# Reportes de telemetría
+lnxdrive report list               # Ver reportes pendientes
+lnxdrive report view <id>          # Ver contenido de un reporte
+lnxdrive report send <id>          # Enviar reporte específico
+lnxdrive report send --all         # Enviar todos los pendientes
+lnxdrive report delete <id>        # Eliminar sin enviar
+lnxdrive report delete --all       # Eliminar todos
 ```
 
 ---
@@ -50,3 +57,4 @@ lnxdrive config validate           # Validar archivo YAML
 - [Adaptador GNOME](02-ui-gnome.md) - Integracion con GNOME
 - [Adaptador KDE Plasma](03-ui-kde-plasma.md) - Integracion con KDE
 - [Adaptador GTK3](04-ui-gtk3.md) - Integracion con XFCE/MATE
+- [Telemetría](13-telemetria.md) - Sistema de reportes de errores
