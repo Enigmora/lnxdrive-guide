@@ -272,8 +272,81 @@ lnxdrive_bulk_mode_active 1
 
 ---
 
+## ⚠️ Riesgos y Mitigaciones
+
+### C6: Rate Limiter Race Condition
+
+| Atributo | Valor |
+|----------|-------|
+| **Prioridad** | P2 (Media) |
+| **Componentes** | TokenBucket, AdaptiveRateLimiter |
+| **Simulación** | SIM-L3-006 |
+
+**Descripción:**
+El token bucket usa operaciones atómicas para gestionar tokens, pero la secuencia check-then-act de `acquire()` puede causar sobre-asignación de tokens bajo alta concurrencia (más requests de los permitidos pasan simultáneamente).
+
+**Escenarios de Fallo:**
+1. Múltiples threads leen `tokens > 0` simultáneamente antes de decrementar
+2. Race entre refill y consume
+3. Contador de operaciones activas desincronizado
+
+**Mitigación Propuesta:**
+```rust
+impl TokenBucket {
+    pub fn try_acquire(&self) -> Option<TokenGuard> {
+        // Operación atómica compare-and-swap
+        loop {
+            let current = self.tokens.load(Ordering::SeqCst);
+            if current == 0 {
+                return None;
+            }
+            
+            // Intentar decrementar atómicamente
+            if self.tokens.compare_exchange(
+                current,
+                current - 1,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ).is_ok() {
+                // También verificar límite concurrente
+                let active = self.active_operations.fetch_add(1, Ordering::SeqCst);
+                if active >= self.concurrent_limit {
+                    // Revertir si excede límite
+                    self.tokens.fetch_add(1, Ordering::SeqCst);
+                    self.active_operations.fetch_sub(1, Ordering::SeqCst);
+                    return None;
+                }
+                
+                return Some(TokenGuard { bucket: self });
+            }
+            // Si CAS falló, otro thread ganó, reintentar
+        }
+    }
+}
+
+impl Drop for TokenGuard {
+    fn drop(&mut self) {
+        self.bucket.active_operations.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+```
+
+**Tests Requeridos:**
+- `test_no_token_overallocation`
+- `test_concurrent_acquire_under_stress`
+- `test_cas_loop_fairness`
+
+---
+
+> [!NOTE]
+> Para la matriz completa de riesgos y simulaciones, ver:
+> - [TRACE-risks-mitigations.md](../.devtrail/02-design/risk-analysis/TRACE-risks-mitigations.md)
+
+---
+
 ## Ver tambien
 
 - [[04-Componentes/08-microsoft-graph|Microsoft Graph]] - Integracion con la API
 - [[04-Componentes/07-motor-sincronizacion|Motor de Sincronizacion]] - Nucleo del sistema
 - [[04-Componentes/12-auditoria|Auditoria]] - Registro de eventos de throttling
+
