@@ -35,7 +35,7 @@ LNXDrive expone metricas en formato Prometheus para observabilidad:
 
 | Rol | Responsabilidad | Repositorios |
 |-----|-----------------|--------------|
-| **Core Maintainers** | Arquitectura, API D-Bus, releases | lnxdrive-core |
+| **Core Maintainers** | Arquitectura, API D-Bus, releases | lnxdrive |
 | **GNOME Maintainers** | UI GNOME, integracion Nautilus | lnxdrive-gnome |
 | **GTK3 Maintainers** | UI para XFCE/Cinnamon/Mate | lnxdrive-gtk3 |
 | **KDE Maintainers** | UI Plasma, Plasmoid | lnxdrive-plasma |
@@ -90,7 +90,7 @@ El proyecto utiliza [Conventional Commits](https://www.conventionalcommits.org/)
 
 Para releases mayores que afectan la API D-Bus:
 
-1. **lnxdrive-core** release primero (daemon + ipc)
+1. **lnxdrive** release primero (daemon + ipc)
 2. UIs actualizan dependencia de `lnxdrive-ipc`
 3. UIs hacen release
 4. **lnxdrive-packaging** actualiza manifiestos

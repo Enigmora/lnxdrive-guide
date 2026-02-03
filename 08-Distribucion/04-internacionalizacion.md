@@ -485,8 +485,8 @@ Keywords[es]=nube;sincronizar;onedrive;gdrive;dropbox;almacenamiento;
   </description>
 
   <launchable type="desktop-id">org.enigmora.LNXDrive.desktop</launchable>
-  <url type="homepage">https://github.com/enigmora/lnxdrive-core</url>
-  <url type="bugtracker">https://github.com/enigmora/lnxdrive-core/issues</url>
+  <url type="homepage">https://github.com/enigmora/lnxdrive</url>
+  <url type="bugtracker">https://github.com/enigmora/lnxdrive/issues</url>
 
   <developer id="org.enigmora">
     <name>Enigmora</name>
