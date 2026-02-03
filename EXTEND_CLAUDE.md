@@ -129,10 +129,13 @@
 The paths above assume the guide repository is a sibling directory:
 ```
 lnxdrive/
-├── lnxdrive-guide/     # This guide
-├── lnxdrive-core/      # Implementation repo (add to CLAUDE.md here)
-├── lnxdrive-gnome/     # Implementation repo (add to CLAUDE.md here)
-└── ...
+├── lnxdrive-guide/     # This guide (design documentation)
+├── lnxdrive-core/      # Core + CLI + Daemon (Rust)
+├── lnxdrive-gnome/     # GNOME UI - GTK4 + libadwaita (Rust)
+├── lnxdrive-gtk3/      # GTK3 UI - XFCE/Cinnamon/Mate (Rust)
+├── lnxdrive-plasma/    # KDE Plasma UI - Qt6 + KDE Frameworks (C++/QML)
+├── lnxdrive-cosmic/    # Cosmic UI - iced + libcosmic (Rust)
+└── lnxdrive-packaging/ # Packaging (Flatpak, deb, rpm, AUR)
 ```
 
 If your structure differs, adjust the `../lnxdrive-guide/` paths accordingly.

@@ -62,7 +62,7 @@ Este pragmatismo se traduce en usar el toolkit y lenguaje que cada entorno de es
 ```
 github.com/enigmora/
 │
-├── lnxdrive/                       # CORE + CLI + DAEMON
+├── lnxdrive-core/                  # CORE + CLI + DAEMON
 │   │                               # ══════════════════
 │   │                               # Lenguaje: Rust
 │   │                               # El corazon del proyecto
@@ -179,17 +179,17 @@ github.com/enigmora/
     │   ├── org.enigmora.LNXDrive.yml           # Manifiesto GNOME
     │   └── org.enigmora.LNXDrive.Gtk3.yml      # Manifiesto GTK3
     ├── deb/
-    │   ├── lnxdrive/
+    │   ├── lnxdrive-core/
     │   │   └── debian/
     │   ├── lnxdrive-gnome/
     │   │   └── debian/
     │   └── ...
     ├── rpm/
-    │   ├── lnxdrive.spec
+    │   ├── lnxdrive-core.spec
     │   ├── lnxdrive-gnome.spec
     │   └── ...
     ├── aur/
-    │   ├── lnxdrive/
+    │   ├── lnxdrive-core/
     │   │   └── PKGBUILD
     │   ├── lnxdrive-gnome/
     │   │   └── PKGBUILD
@@ -210,7 +210,7 @@ github.com/enigmora/
 
 | Repositorio | Lenguaje | Toolkit | Escritorios | LOC Estimado |
 |-------------|----------|---------|-------------|--------------|
-| `lnxdrive` | Rust | - | (backend) | ~30,000 |
+| `lnxdrive-core` | Rust | - | (backend) | ~30,000 |
 | `lnxdrive-gnome` | Rust | gtk4-rs + libadwaita | GNOME | ~5,000 |
 | `lnxdrive-gtk3` | Rust | gtk3-rs | XFCE, Cinnamon, Mate | ~4,000 |
 | `lnxdrive-plasma` | C++/QML | Qt6 + KDE Frameworks | KDE Plasma | ~4,000 |
@@ -235,7 +235,7 @@ MAJOR.MINOR.PATCH
 
 #### Matriz de Compatibilidad
 
-| lnxdrive (daemon) | lnxdrive-ipc | UIs compatibles |
+| lnxdrive-core (daemon) | lnxdrive-ipc | UIs compatibles |
 |-------------------|--------------|-----------------|
 | 1.0.x | 1.0.x | gnome 1.x, gtk3 1.x, plasma 1.x, cosmic 1.x |
 | 1.1.x | 1.0.x - 1.1.x | gnome 1.x, gtk3 1.x, plasma 1.x, cosmic 1.x |
@@ -260,7 +260,7 @@ version = "1"
 
 ### 17.8 CI/CD por Repositorio
 
-#### lnxdrive (Core)
+#### lnxdrive-core
 
 ```yaml
 # .github/workflows/ci.yml
@@ -399,7 +399,7 @@ jobs:
 
 Para releases mayores que afectan la API D-Bus:
 
-1. **lnxdrive** release primero (daemon + ipc)
+1. **lnxdrive-core** release primero (daemon + ipc)
 2. UIs actualizan dependencia de `lnxdrive-ipc`
 3. UIs hacen release
 4. **lnxdrive-packaging** actualiza manifiestos
@@ -449,7 +449,7 @@ edition = "2021"
 lnxdrive-ipc = "1.0"
 
 # O desde git durante desarrollo
-# lnxdrive-ipc = { git = "https://github.com/enigmora/lnxdrive", branch = "main" }
+# lnxdrive-ipc = { git = "https://github.com/enigmora/lnxdrive-core", branch = "main" }
 
 gtk4 = "0.8"
 libadwaita = "0.6"
