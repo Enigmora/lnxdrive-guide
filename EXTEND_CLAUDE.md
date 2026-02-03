@@ -130,7 +130,7 @@ The paths above assume the guide repository is a sibling directory:
 ```
 lnxdrive/
 ├── lnxdrive-guide/     # This guide (design documentation)
-├── lnxdrive-core/      # Core + CLI + Daemon (Rust)
+├── lnxdrive/           # Core + CLI + Daemon (Rust)
 ├── lnxdrive-gnome/     # GNOME UI - GTK4 + libadwaita (Rust)
 ├── lnxdrive-gtk3/      # GTK3 UI - XFCE/Cinnamon/Mate (Rust)
 ├── lnxdrive-plasma/    # KDE Plasma UI - Qt6 + KDE Frameworks (C++/QML)
