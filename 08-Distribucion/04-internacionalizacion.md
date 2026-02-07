@@ -579,3 +579,4 @@ install(FILES ${qm_files} DESTINATION ${KDE_INSTALL_LOCALEDIR})
 - [01-estructura-repositorios.md](01-estructura-repositorios.md) - Estructura de repositorios
 - [02-comunicacion-dbus.md](02-comunicacion-dbus.md) - Comunicacion D-Bus
 - [03-gobernanza-proyecto.md](03-gobernanza-proyecto.md) - Gobernanza del proyecto
+- [05-packaging-desktop-integration.md](05-packaging-desktop-integration.md) - Packaging e integracion desktop
