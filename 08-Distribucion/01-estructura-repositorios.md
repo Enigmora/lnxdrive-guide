@@ -463,3 +463,4 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 - [02-comunicacion-dbus.md](02-comunicacion-dbus.md) - Comunicacion D-Bus entre componentes
 - [03-gobernanza-proyecto.md](03-gobernanza-proyecto.md) - Gobernanza y observabilidad del proyecto
 - [04-internacionalizacion.md](04-internacionalizacion.md) - Estrategia de internacionalizacion (i18n)
+- [05-packaging-desktop-integration.md](05-packaging-desktop-integration.md) - Packaging e integracion desktop

@@ -448,5 +448,7 @@ impl DbusService {
 
 - [01-estructura-repositorios.md](01-estructura-repositorios.md) - Estructura de repositorios
 - [03-gobernanza-proyecto.md](03-gobernanza-proyecto.md) - Gobernanza y observabilidad
+- [04-internacionalizacion.md](04-internacionalizacion.md) - Estrategia de internacionalizacion
+- [05-packaging-desktop-integration.md](05-packaging-desktop-integration.md) - Packaging e integracion desktop
 - [Capas y Puertos](../03-Arquitectura/02-capas-y-puertos.md) - Diagrama de componentes
 

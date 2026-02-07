@@ -192,3 +192,4 @@ DevTrail es un sistema de gobernanza documentaria que permite:
 - [01-estructura-repositorios.md](01-estructura-repositorios.md) - Estructura de repositorios
 - [02-comunicacion-dbus.md](02-comunicacion-dbus.md) - Comunicacion D-Bus
 - [04-internacionalizacion.md](04-internacionalizacion.md) - Estrategia de internacionalizacion
+- [05-packaging-desktop-integration.md](05-packaging-desktop-integration.md) - Packaging e integracion desktop
